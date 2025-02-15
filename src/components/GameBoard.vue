@@ -1,0 +1,174 @@
+<template>
+  <div class="game-board">
+    <div class="board-grid">
+      <div
+        v-for="(row, rowIndex) in board"
+        :key="rowIndex"
+        class="board-row"
+      >
+        <div
+          v-for="(cell, colIndex) in row"
+          :key="colIndex"
+          class="board-cell"
+          :class="{
+            'water-cell': isWaterCell(rowIndex, colIndex),
+            'highlight': isValidMove(rowIndex, colIndex),
+          }"
+          @click="handleCellClick(rowIndex, colIndex)"
+        >
+          <GamePiece
+            v-if="cell"
+            :piece="cell"
+            :is-selected="isSelected(rowIndex, colIndex)"
+            @click="selectPiece(rowIndex, colIndex)"
+          />
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import { computed } from 'vue'
+import { useStore } from 'vuex'
+import GamePiece from './GamePiece.vue'
+
+export default {
+  name: 'GameBoard',
+  components: {
+    GamePiece
+  },
+  setup() {
+    const store = useStore()
+    const board = computed(() => store.state.board)
+    const selectedPiece = computed(() => store.state.selectedPiece)
+    const gamePhase = computed(() => store.state.gamePhase)
+
+    const isWaterCell = (row, col) => {
+      return (row === 4 || row === 5) && (col === 2 || col === 3 || col === 6 || col === 7)
+    }
+
+    const isValidMove = (row, col) => {
+      if (gamePhase.value === 'setup') return false;
+      if (!selectedPiece.value || !selectedPiece.value.row || !selectedPiece.value.col || isWaterCell(row, col)) return false;
+      return store.getters.getValidMoves(selectedPiece.value)
+        .some(move => move.row === row && move.col === col);
+    }
+
+    const isSelected = (row, col) => {
+      return selectedPiece.value?.row === row && selectedPiece.value?.col === col
+    }
+
+    const selectPiece = (row, col) => {
+      if (gamePhase.value !== 'playing') return
+      if (store.state.currentPlayer !== 'player') return // Only allow selection during player's turn
+      
+      const piece = board.value[row][col]
+      if (!piece || piece.player !== 'player') return
+      
+      // Don't allow selection of bombs and flags
+      if (piece.type === 'B' || piece.type === 'F') {
+        console.log('Cannot select immovable piece:', piece.type);
+        return;
+      }
+      
+      console.log('Selecting piece:', piece.type, 'at:', row, col);
+      store.commit('selectPiece', { row, col, ...piece })
+    }
+
+    const handleCellClick = (row, col) => {
+      if (gamePhase.value === 'setup') {
+        if (row < 6) return // Only allow placement in last 4 rows
+        if (board.value[row][col]) return // Don't allow placement on occupied squares
+        if (store.state.selectedPiece) {
+          store.commit('placePiece', {
+            piece: {
+              type: store.state.selectedPiece.type,
+              player: 'player',
+              row,
+              col
+            },
+            row,
+            col
+          })
+        }
+      } else if (gamePhase.value === 'playing') {
+        // Only handle moves during player's turn
+        if (store.state.currentPlayer !== 'player') return
+
+        const clickedPiece = board.value[row][col]
+        
+        // If clicking on own piece, select it (unless it's a bomb or flag)
+        if (clickedPiece && clickedPiece.player === 'player') {
+          selectPiece(row, col)
+          return
+        }
+        
+        // If a piece is selected and the move is valid, make the move
+        if (selectedPiece.value && isValidMove(row, col)) {
+          store.dispatch('makeMove', {
+            from: { 
+              row: selectedPiece.value.row, 
+              col: selectedPiece.value.col 
+            },
+            to: { row, col }
+          })
+          // Clear selection after move
+          store.commit('selectPiece', null)
+        }
+      }
+    }
+
+    return {
+      board,
+      isWaterCell,
+      isValidMove,
+      isSelected,
+      selectPiece,
+      handleCellClick
+    }
+  }
+}
+</script>
+
+<style lang="scss" scoped>
+.game-board {
+  padding: 1rem;
+
+  .board-grid {
+    display: grid;
+    grid-template-rows: repeat(10, var(--piece-size));
+    gap: 1px;
+    background-color: #666;
+    border: 2px solid #333;
+  }
+
+  .board-row {
+    display: grid;
+    grid-template-columns: repeat(10, var(--piece-size));
+    gap: 1px;
+  }
+
+  .board-cell {
+    background-color: var(--board-color);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+
+    &:hover {
+      background-color: darken(#deb887, 5%);
+    }
+
+    &.water-cell {
+      background-color: var(--water-color);
+      cursor: not-allowed;
+
+      &:hover {
+        background-color: var(--water-color);
+      }
+    }
+  }
+}
+</style> 
