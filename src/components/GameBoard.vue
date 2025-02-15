@@ -13,6 +13,7 @@
           :class="{
             'water-cell': isWaterCell(rowIndex, colIndex),
             'highlight': isValidMove(rowIndex, colIndex),
+            'battling': isBattlingPiece(rowIndex, colIndex)
           }"
           @click="handleCellClick(rowIndex, colIndex)"
         >
@@ -43,6 +44,7 @@ export default {
     const board = computed(() => store.state.board)
     const selectedPiece = computed(() => store.state.selectedPiece)
     const gamePhase = computed(() => store.state.gamePhase)
+    const currentBattle = computed(() => store.state.currentBattle)
 
     const isWaterCell = (row, col) => {
       return (row === 4 || row === 5) && (col === 2 || col === 3 || col === 6 || col === 7)
@@ -137,13 +139,24 @@ export default {
       }
     }
 
+    const isBattlingPiece = (row, col) => {
+      if (!currentBattle.value || gamePhase.value !== 'battle') return false;
+      
+      const { attackerPosition, defenderPosition } = currentBattle.value;
+      return (
+        (row === attackerPosition.row && col === attackerPosition.col) ||
+        (row === defenderPosition.row && col === defenderPosition.col)
+      );
+    }
+
     return {
       board,
       isWaterCell,
       isValidMove,
       isSelected,
       selectPiece,
-      handleCellClick
+      handleCellClick,
+      isBattlingPiece
     }
   }
 }
@@ -173,7 +186,8 @@ export default {
     justify-content: center;
     align-items: center;
     cursor: pointer;
-    transition: background-color 0.2s ease;
+    transition: all 0.2s ease;
+    position: relative;
 
     &:hover {
       background-color: darken(#deb887, 5%);
@@ -187,6 +201,42 @@ export default {
         background-color: var(--water-color);
       }
     }
+
+    &.highlight {
+      &::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border: 2px solid var(--secondary-color);
+        opacity: 0.5;
+        pointer-events: none;
+      }
+    }
+
+    &.battling {
+      animation: pulseBattle 1.5s infinite;
+      
+      &::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border: 3px solid var(--accent-color);
+        opacity: 0.7;
+        pointer-events: none;
+      }
+    }
+  }
+}
+
+@keyframes pulseBattle {
+  0% {
+    box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(231, 76, 60, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(231, 76, 60, 0);
   }
 }
 </style> 
