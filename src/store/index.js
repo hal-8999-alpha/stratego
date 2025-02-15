@@ -1,5 +1,5 @@
 import { createStore } from 'vuex'
-import { getInitialAISetup, calculateAIMove } from '../ai/strategoAI'
+import { getInitialAISetup, calculateAIMove } from '../ai/enhancedAI'
 
 const BOARD_SIZE = 10
 const INITIAL_PIECES = {
@@ -70,7 +70,8 @@ export default createStore({
       ai: []     // pieces captured by AI
     },
     captureId: 0, // unique id for captured pieces
-    isDebugMode: false // new debug state
+    isDebugMode: false, // new debug state
+    enhancedAI: null // new enhancedAI state
   },
   
   mutations: {
@@ -223,6 +224,17 @@ export default createStore({
       
       // Switch turns
       state.currentPlayer = state.currentPlayer === 'player' ? 'ai' : 'player';
+
+      // Record battle in AI memory
+      if (state.enhancedAI) {
+        state.enhancedAI.memory.recordBattle(
+          attackerPosition,
+          defenderPosition,
+          attacker.type,
+          defender.type,
+          winner
+        );
+      }
     },
     
     setGamePhase(state, phase) {
@@ -280,6 +292,25 @@ export default createStore({
     toggleDebugMode(state) {
       state.isDebugMode = !state.isDebugMode;
       console.log('Debug mode:', state.isDebugMode ? 'ON' : 'OFF');
+    },
+
+    handleBattle(state, { attackerPosition, defenderPosition, winner }) {
+      const attacker = state.board[attackerPosition.row][attackerPosition.col]
+      const defender = state.board[defenderPosition.row][defenderPosition.col]
+      
+      // Record battle in AI memory
+      if (state.enhancedAI) {
+        state.enhancedAI.memory.recordBattle(
+          attackerPosition,
+          defenderPosition,
+          attacker.type,
+          defender.type,
+          winner
+        );
+      }
+
+      // Rest of the existing battle handling code...
+      // ... existing code ...
     }
   },
   
