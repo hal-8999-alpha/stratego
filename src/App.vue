@@ -14,6 +14,13 @@
           >
             Reset Game
           </button>
+          <button
+            class="debug-btn"
+            @click="toggleDebug"
+            :class="{ 'active': isDebugMode }"
+          >
+            {{ isDebugMode ? 'Debug: ON' : 'Debug: OFF' }}
+          </button>
         </div>
       </div>
       <div class="game-layout">
@@ -56,6 +63,7 @@ export default {
     const gamePhase = computed(() => store.state.gamePhase)
     const currentPlayer = computed(() => store.state.currentPlayer)
     const winner = computed(() => store.state.winner)
+    const isDebugMode = computed(() => store.state.isDebugMode)
 
     const gameStatus = computed(() => {
       if (gamePhase.value === 'playing') {
@@ -75,11 +83,17 @@ export default {
       store.commit('resetGame')
     }
 
+    const toggleDebug = () => {
+      store.commit('toggleDebugMode')
+    }
+
     return {
       gamePhase,
       gameStatus,
       winner,
-      resetGame
+      isDebugMode,
+      resetGame,
+      toggleDebug
     }
   }
 }
@@ -199,6 +213,27 @@ export default {
         }
       }
     }
+  }
+}
+
+.debug-btn {
+  padding: 0.5rem 1rem;
+  background-color: #666;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-left: 1rem;
+
+  &:hover {
+    filter: brightness(90%);
+  }
+
+  &.active {
+    background-color: var(--accent-color);
   }
 }
 </style> 

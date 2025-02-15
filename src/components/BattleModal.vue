@@ -45,7 +45,18 @@ export default {
       
       // Spy rules
       if (attacker.type === 'S') {
-        console.log('Spy is attacking - always wins');
+        // Spy vs Spy - both lose
+        if (defender.type === 'S') {
+          console.log('Spy vs Spy - both lose');
+          return 'draw';
+        }
+        // Spy cannot win against a bomb
+        if (defender.type === 'B') {
+          console.log('Spy attacking bomb - spy loses');
+          return 'defender';
+        }
+        // Spy wins against everything else when attacking
+        console.log('Spy attacking - spy wins');
         return 'attacker';
       }
       if (defender.type === 'S') {

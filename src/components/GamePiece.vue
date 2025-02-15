@@ -7,12 +7,15 @@
       'ai-piece': piece.player === 'ai'
     }"
   >
-    <span class="piece-value" v-if="piece.player === 'player' || revealAi">{{ piece.type }}</span>
+    <span class="piece-value" v-if="shouldShowValue">{{ piece.type }}</span>
     <span class="piece-value" v-else>?</span>
   </div>
 </template>
 
 <script>
+import { computed } from 'vue'
+import { useStore } from 'vuex'
+
 export default {
   name: 'GamePiece',
   props: {
@@ -27,6 +30,20 @@ export default {
     revealAi: {
       type: Boolean,
       default: false
+    }
+  },
+  setup(props) {
+    const store = useStore()
+    const isDebugMode = computed(() => store.state.isDebugMode)
+    
+    const shouldShowValue = computed(() => 
+      props.piece.player === 'player' || 
+      props.revealAi || 
+      isDebugMode.value
+    )
+
+    return {
+      shouldShowValue
     }
   }
 }

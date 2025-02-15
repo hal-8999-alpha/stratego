@@ -69,7 +69,8 @@ export default createStore({
       player: [], // pieces captured by player
       ai: []     // pieces captured by AI
     },
-    captureId: 0 // unique id for captured pieces
+    captureId: 0, // unique id for captured pieces
+    isDebugMode: false // new debug state
   },
   
   mutations: {
@@ -88,7 +89,10 @@ export default createStore({
     },
     
     selectPiece(state, piece) {
-      state.selectedPiece = piece
+      console.log('Store selecting piece:', piece);
+      // Ensure all piece data is properly copied
+      state.selectedPiece = piece ? { ...piece } : null;
+      console.log('Selected piece in store:', state.selectedPiece);
     },
     
     startBattle(state, { attacker, defender, attackerPosition, defenderPosition }) {
@@ -271,6 +275,11 @@ export default createStore({
       state.currentPlayer = 'player';
       state.capturedPieces = { player: [], ai: [] };
       state.captureId = 0;
+    },
+    
+    toggleDebugMode(state) {
+      state.isDebugMode = !state.isDebugMode;
+      console.log('Debug mode:', state.isDebugMode ? 'ON' : 'OFF');
     }
   },
   

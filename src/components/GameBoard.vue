@@ -50,9 +50,22 @@ export default {
 
     const isValidMove = (row, col) => {
       if (gamePhase.value === 'setup') return false;
-      if (!selectedPiece.value || !selectedPiece.value.row || !selectedPiece.value.col || isWaterCell(row, col)) return false;
-      return store.getters.getValidMoves(selectedPiece.value)
-        .some(move => move.row === row && move.col === col);
+      
+      // Early return if no piece is selected
+      if (!selectedPiece.value) return false;
+      
+      // Early return if water cell
+      if (isWaterCell(row, col)) return false;
+      
+      // Check if the selected piece has valid coordinates
+      const piece = selectedPiece.value;
+      if (typeof piece.row !== 'number' || typeof piece.col !== 'number') {
+        console.log('Selected piece missing coordinates:', piece);
+        return false;
+      }
+      
+      const validMoves = store.getters.getValidMoves(piece);
+      return validMoves.some(move => move.row === row && move.col === col);
     }
 
     const isSelected = (row, col) => {
@@ -73,7 +86,12 @@ export default {
       }
       
       console.log('Selecting piece:', piece.type, 'at:', row, col);
-      store.commit('selectPiece', { row, col, ...piece })
+      store.commit('selectPiece', {
+        type: piece.type,
+        player: piece.player,
+        row: row,
+        col: col
+      });
     }
 
     const handleCellClick = (row, col) => {
