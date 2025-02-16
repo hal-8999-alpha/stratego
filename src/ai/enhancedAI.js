@@ -105,11 +105,17 @@ class AIMemory {
     this.revealedPieces.add(`${attackerPos.row}-${attackerPos.col}`);
     this.revealedPieces.add(`${defenderPos.row}-${defenderPos.col}`);
     
-    // Record battle outcome for learning
+    // Record battle outcome for learning with player information
     this.battleHistory.push({
-      attackerType,
-      defenderType,
-      winner,
+      attacker: {
+        type: attackerType,
+        player: winner === 'attacker' ? 'ai' : 'player'
+      },
+      defender: {
+        type: defenderType,
+        player: winner === 'defender' ? 'ai' : 'player'
+      },
+      winner: winner === 'attacker' ? 'ai' : 'player',
       timestamp: Date.now()
     });
 
@@ -484,8 +490,8 @@ class EnhancedAI {
       // Additional penalty for attacking with a weaker or equal piece than one that just lost
       const recentBattles = this.memory.battleHistory.slice(-5);
       for (const battle of recentBattles) {
-        if (battle.defenderType === targetPiece.type && 
-            this.memory.getEffectiveStrength(move.piece.type) <= this.memory.getEffectiveStrength(battle.attackerType)) {
+        if (battle.defender.type === targetPiece.type && 
+            this.memory.getEffectiveStrength(move.piece.type) <= this.memory.getEffectiveStrength(battle.attacker.type)) {
           score -= 800;
           break;
         }
@@ -496,7 +502,7 @@ class EnhancedAI {
         const battlePos = this.memory.battleHistory.find(b => 
           b.timestamp === battle.timestamp
         );
-        return battlePos && battlePos.defenderType === 'B';
+        return battlePos && battlePos.defender.type === 'B';
       });
 
       if (recentBattlesAtPosition.length > 0 && move.piece.type !== '8') {

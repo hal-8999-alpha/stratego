@@ -2,9 +2,13 @@ import { enhancedAI } from './enhancedAI';
 
 class HybridAI {
     constructor(geminiApiKey) {
-        this.enhancedAI = enhancedAI;
-        this.pythonEndpoint = 'http://localhost:5000/analyze'; // We'll create this Flask endpoint
+        this.pythonEndpoint = 'http://localhost:5000/analyze';
         this.apiKey = geminiApiKey;
+        this.moveHistory = [];
+        this.battleHistory = [];
+        this.knownPieces = {};
+        this.confirmedBombs = new Set();
+        this.turnCount = 0;
     }
 
     async calculateMove(board, gameState) {
@@ -16,19 +20,20 @@ class HybridAI {
                 // Get move from Gemini
                 const analysis = await this.getGeminiAnalysis(
                     board,
-                    this.enhancedAI.getAllPossibleMoves(board),
-                    this.enhancedAI.memory.knownPieces,
-                    this.enhancedAI.memory.battleHistory,
-                    Array.from(this.enhancedAI.memory.confirmedBombs).map(pos => {
+                    this.getLegalMoves(board),
+                    this.knownPieces,
+                    this.battleHistory,
+                    Array.from(this.confirmedBombs).map(pos => {
                         const [row, col] = pos.split('-').map(Number);
                         return { row, col };
                     }),
-                    this.enhancedAI.turnCount
+                    this.turnCount,
+                    this.moveHistory
                 );
 
                 if (analysis && analysis.move) {
                     // Verify the move is valid
-                    const possibleMoves = this.enhancedAI.getAllPossibleMoves(board);
+                    const possibleMoves = this.getLegalMoves(board);
                     const geminiMove = possibleMoves.find(move => 
                         move.from.row === analysis.move.from.row &&
                         move.from.col === analysis.move.from.col &&
@@ -37,6 +42,13 @@ class HybridAI {
                     );
 
                     if (geminiMove) {
+                        // Record AI move
+                        this.moveHistory.push({
+                            player: 'ai',
+                            from: geminiMove.from,
+                            to: geminiMove.to
+                        });
+                        this.turnCount++;
                         return geminiMove;
                     }
                 }
@@ -59,7 +71,120 @@ class HybridAI {
         throw new Error('Failed to get valid move from Gemini after maximum retries');
     }
 
-    async getGeminiAnalysis(board, legalMoves, knownPieces, battleHistory, confirmedBombs, turnCount) {
+    // Record a battle outcome
+    recordBattle(attackerPos, defenderPos, attackerPiece, defenderPiece, winner) {
+        // Record the battle
+        this.battleHistory.push({
+            attacker: {
+                type: attackerPiece.type,
+                player: attackerPiece.player
+            },
+            defender: {
+                type: defenderPiece.type,
+                player: defenderPiece.player
+            },
+            winner: winner === 'attacker' ? attackerPiece.player : defenderPiece.player
+        });
+
+        // Record known pieces
+        const attackerKey = `${attackerPos.row}-${attackerPos.col}`;
+        const defenderKey = `${defenderPos.row}-${defenderPos.col}`;
+        
+        if (winner === null) {
+            // Draw - both pieces are removed
+            delete this.knownPieces[attackerKey];
+            delete this.knownPieces[defenderKey];
+        } else if (winner === 'attacker') {
+            // Attacker won - they move to defender's position
+            this.knownPieces[defenderKey] = attackerPiece;
+            delete this.knownPieces[attackerKey];
+        } else {
+            // Defender won - they stay in place and attacker is removed
+            this.knownPieces[defenderKey] = defenderPiece;
+            delete this.knownPieces[attackerKey];
+        }
+
+        // Record bombs
+        if (defenderPiece.type === 'B') {
+            this.confirmedBombs.add(defenderKey);
+        }
+    }
+
+    // Record player moves
+    recordPlayerMove(from, to) {
+        this.moveHistory.push({
+            player: 'player',
+            from,
+            to
+        });
+        
+        // Update known pieces location if we know the piece that moved
+        const fromKey = `${from.row}-${from.col}`;
+        const toKey = `${to.row}-${to.col}`;
+        
+        // Check if this was a multi-space move (only Scout/9 can do this)
+        const distance = Math.abs(to.row - from.row) + Math.abs(to.col - from.col);
+        if (distance > 1) {
+            // If a piece moves multiple spaces, it must be a Scout (9)
+            this.knownPieces[toKey] = { type: '9', player: 'player' };
+        } else if (this.knownPieces[fromKey]) {
+            // Move the piece to its new location
+            this.knownPieces[toKey] = this.knownPieces[fromKey];
+            // Remove it from the old location
+            delete this.knownPieces[fromKey];
+        }
+        
+        this.turnCount++;
+    }
+
+    // Get legal moves for the AI
+    getLegalMoves(board) {
+        const moves = [];
+        for (let row = 0; row < 10; row++) {
+            for (let col = 0; col < 10; col++) {
+                const piece = board[row][col];
+                if (piece && piece.player === 'ai' && piece.type !== 'B' && piece.type !== 'F') {
+                    const validMoves = this.getValidMovesForPiece(piece, row, col, board);
+                    validMoves.forEach(to => {
+                        moves.push({
+                            from: { row, col },
+                            to,
+                            piece
+                        });
+                    });
+                }
+            }
+        }
+        return moves;
+    }
+
+    // Get valid moves for a piece
+    getValidMovesForPiece(piece, row, col, board) {
+        const moves = [];
+        const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+        const maxSteps = piece.type === '9' ? 9 : 1;
+
+        directions.forEach(([dx, dy]) => {
+            for (let steps = 1; steps <= maxSteps; steps++) {
+                const newRow = row + dx * steps;
+                const newCol = col + dy * steps;
+
+                if (newRow < 0 || newRow >= 10 || newCol < 0 || newCol >= 10) break;
+                if ((newRow === 4 || newRow === 5) && (newCol === 2 || newCol === 3 || newCol === 6 || newCol === 7)) break;
+
+                const targetPiece = board[newRow][newCol];
+                if (steps > 1 && targetPiece) break;
+                if (targetPiece && targetPiece.player === piece.player) break;
+
+                moves.push({ row: newRow, col: newCol });
+                if (targetPiece) break;
+            }
+        });
+
+        return moves;
+    }
+
+    async getGeminiAnalysis(board, legalMoves, knownPieces, battleHistory, confirmedBombs, turnCount, moveHistory) {
         try {
             const response = await fetch(this.pythonEndpoint, {
                 method: 'POST',
@@ -73,7 +198,8 @@ class HybridAI {
                     knownPieces,
                     battleHistory,
                     confirmedBombs,
-                    turnCount
+                    turnCount,
+                    moveHistory
                 })
             });
 
@@ -86,128 +212,6 @@ class HybridAI {
             console.error('Error getting Gemini analysis:', error);
             return null;
         }
-    }
-
-    combineAnalysis(moves, geminiAnalysis) {
-        // Start with enhanced AI's move evaluation
-        const scoredMoves = moves.map(move => ({
-            ...move,
-            score: this.enhancedAI.evaluateMove(move, this.enhancedAI.board, {})
-        }));
-
-        if (geminiAnalysis) {
-            // Parse Gemini's recommended move
-            const recommendedMove = this.parseRecommendedMove(geminiAnalysis.recommended_move);
-            
-            // Adjust scores based on Gemini's analysis
-            scoredMoves.forEach(move => {
-                // Boost score if this move matches Gemini's recommendation
-                if (this.movesMatch(move, recommendedMove)) {
-                    move.score += 500;
-                }
-
-                // Adjust score based on flag prediction
-                if (geminiAnalysis.flag_prediction) {
-                    const predictedFlag = this.parseFlagPrediction(geminiAnalysis.flag_prediction);
-                    if (predictedFlag) {
-                        // Boost moves that approach predicted flag location
-                        const distanceToFlag = this.calculateDistance(
-                            move.to,
-                            predictedFlag
-                        );
-                        move.score += (10 - distanceToFlag) * 30;
-                    }
-                }
-
-                // Apply strategic considerations from analysis
-                this.applyStrategicConsiderations(move, geminiAnalysis.analysis);
-            });
-        }
-
-        // Sort by score
-        return scoredMoves.sort((a, b) => b.score - a.score);
-    }
-
-    parseRecommendedMove(recommendation) {
-        if (!recommendation) return null;
-        
-        // Example format: "Move piece from (3,4) to (5,6)"
-        const match = recommendation.match(/from \((\d+),(\d+)\) to \((\d+),(\d+)\)/);
-        if (match) {
-            const [_, fromRow, fromCol, toRow, toCol] = match;
-            return {
-                from: { row: parseInt(fromRow), col: parseInt(fromCol) },
-                to: { row: parseInt(toRow), col: parseInt(toCol) }
-            };
-        }
-        return null;
-    }
-
-    parseFlagPrediction(prediction) {
-        if (!prediction) return null;
-
-        // Example format: "Flag might be at (8,9)"
-        const match = prediction.match(/at \((\d+),(\d+)\)/);
-        if (match) {
-            const [_, row, col] = match;
-            return { row: parseInt(row), col: parseInt(col) };
-        }
-        return null;
-    }
-
-    applyStrategicConsiderations(move, analysis) {
-        if (!analysis) return;
-
-        // Look for key strategic patterns in the analysis
-        analysis.forEach(line => {
-            // Boost moves that align with strategic considerations
-            if (line.includes('protect') && this.isProtectiveMove(move)) {
-                move.score += 200;
-            }
-            if (line.includes('scout') && move.piece.type === '9') {
-                move.score += 150;
-            }
-            if (line.includes('attack') && this.isAttackingMove(move)) {
-                move.score += 100;
-            }
-            // Add penalties for moves that contradict strategic advice
-            if (line.includes('avoid') && this.matchesWarning(move, line)) {
-                move.score -= 300;
-            }
-        });
-    }
-
-    calculateDistance(pos1, pos2) {
-        return Math.abs(pos1.row - pos2.row) + Math.abs(pos1.col - pos2.col);
-    }
-
-    movesMatch(move1, move2) {
-        if (!move2) return false;
-        return move1.from.row === move2.from.row &&
-               move1.from.col === move2.from.col &&
-               move1.to.row === move2.to.row &&
-               move1.to.col === move2.to.col;
-    }
-
-    isProtectiveMove(move) {
-        // Check if this move helps protect other pieces
-        const nearbyAllies = this.enhancedAI.getNearbyPieces(move.to, this.enhancedAI.board, 'ai');
-        return nearbyAllies.some(ally => this.enhancedAI.getPieceValue(ally.type) >= 8);
-    }
-
-    isAttackingMove(move) {
-        // Check if this move attacks an enemy piece
-        const targetPiece = this.enhancedAI.board[move.to.row][move.to.col];
-        return targetPiece && targetPiece.player === 'player';
-    }
-
-    matchesWarning(move, warning) {
-        // Parse warning and check if move contradicts it
-        // This is a simple implementation - you might want to make it more sophisticated
-        if (warning.includes('bomb') && !this.enhancedAI.memory.confirmedBombs.has(`${move.to.row}-${move.to.col}`)) {
-            return true;
-        }
-        return false;
     }
 }
 
